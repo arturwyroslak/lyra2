@@ -122,6 +122,7 @@ export CUDA_HOME=$CUDA_HOME
 echo ""
 echo "Step 5: Installing Python dependencies..."
 pip install --only-binary=:all: -r requirements.txt
+pip install "git+https://github.com/facebookresearch/fvcore"
 pip install "git+https://github.com/microsoft/MoGe.git"
 pip install --no-build-isolation "transformer_engine[pytorch]"
 
