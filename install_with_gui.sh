@@ -121,7 +121,7 @@ export CUDA_HOME=$CUDA_HOME
 # Step 5: Install Python dependencies
 echo ""
 echo "Step 5: Installing Python dependencies..."
-pip install --no-deps -r requirements.txt
+pip install --only-binary=:all: -r requirements.txt
 pip install "git+https://github.com/microsoft/MoGe.git"
 pip install --no-build-isolation "transformer_engine[pytorch]"
 

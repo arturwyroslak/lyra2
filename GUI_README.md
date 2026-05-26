@@ -72,23 +72,28 @@ pip install moviepy>=1.0.0
 
 ### Starting the GUI
 
-1. Activate the conda environment:
+1. Set environment variables:
 ```bash
-conda activate lyra2
+export CUDA_HOME=/usr/local/cuda
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
 ```
 
-2. Set environment variables:
+2. Launch the GUI:
 ```bash
-SITE=$CONDA_PREFIX/lib/python3.10/site-packages
-export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$SITE/torch/lib:$SITE/nvidia/cuda_runtime/lib:$SITE/nvidia/cudnn/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+PYTHONPATH=. python3 -m lyra_2._src.gui.lyra_gui
 ```
 
-3. Launch the GUI:
-```bash
-PYTHONPATH=. python -m lyra_2._src.gui.lyra_gui
-```
+3. Open your browser to: `http://localhost:7860`
 
-4. Open your browser to: `http://localhost:7860`
+**For Google Colab:**
+```python
+# Set environment variables
+%env CUDA_HOME=/usr/local/cuda
+%env LD_LIBRARY_PATH=/usr/local/cuda/lib64
+
+# Run GUI with public URL
+PYTHONPATH=. python3 -m lyra_2._src.gui.lyra_gui --share
+```
 
 ### Workflow
 
