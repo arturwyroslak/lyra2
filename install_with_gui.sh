@@ -4,6 +4,7 @@
 #
 # Installation script for Lyra 2.0 with GUI support (No Conda)
 # Based on INSTALL.md with additional GUI dependencies
+# Supports Google Colab
 
 set -e  # Exit on error
 
@@ -12,19 +13,44 @@ echo "Lyra 2.0 Installation with GUI Support"
 echo "=========================================="
 echo ""
 
-# Check Python version
+# Detect if running in Google Colab
+if [ -f "/content/drive/MyDrive" ] || [ -d "/content" ] && [ -n "$COLAB_GPU" ]; then
+    echo "Detected Google Colab environment"
+    IS_COLAB=true
+else
+    IS_COLAB=false
+fi
+
+# Check Python version and install 3.10 if needed
 echo "Checking Python version..."
 PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
 PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
 PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
 
+echo "Current Python version: $PYTHON_VERSION"
+
 if [ "$PYTHON_MAJOR" -ne 3 ] || [ "$PYTHON_MINOR" -ne 10 ]; then
-    echo "Warning: Python 3.10 is recommended. Current version: $PYTHON_VERSION"
-    echo "Installation may fail with other Python versions."
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    echo "Python 3.10 is required. Current version: $PYTHON_VERSION"
+    
+    if [ "$IS_COLAB" = true ]; then
+        echo "Installing Python 3.10 in Google Colab..."
+        
+        # In Colab, use conda to install Python 3.10
+        conda install -n base python=3.10 -y -c conda-forge
+        
+        # Update python3 to point to conda environment
+        export PATH="$CONDA_PREFIX/bin:$PATH"
+        
+        PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+        echo "Python version after installation: $PYTHON_VERSION"
+    else
+        echo "Warning: Python 3.10 is recommended. Current version: $PYTHON_VERSION"
+        echo "Installation may fail with other Python versions."
+        read -p "Continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
     fi
 fi
 
@@ -49,7 +75,11 @@ echo "CUDA version: $CUDA_VERSION"
 # Step 1: Install system dependencies
 echo ""
 echo "Step 1: Installing system dependencies..."
-if command -v apt-get &> /dev/null; then
+if [ "$IS_COLAB" = true ]; then
+    echo "Installing system dependencies in Google Colab (no sudo needed)..."
+    apt-get update
+    apt-get install -y cmake ninja-build libgl1-mesa-glx ffmpeg pkg-config libeigen3-dev zlib1g-dev
+elif command -v apt-get &> /dev/null; then
     sudo apt-get update
     sudo apt-get install -y python3-pip python3-venv cmake ninja-build libgl1-mesa-glx ffmpeg pkg-config libeigen3-dev zlib1g-dev
 elif command -v yum &> /dev/null; then
@@ -108,20 +138,27 @@ pip install requests>=2.31.0
 # Add LD_LIBRARY_PATH to shell profile
 echo ""
 echo "Step 9: Adding LD_LIBRARY_PATH to shell profile..."
-SHELL_PROFILE="$HOME/.bashrc"
-if [ -n "$ZSH_VERSION" ]; then
-    SHELL_PROFILE="$HOME/.zshrc"
-fi
-
-if ! grep -q "LYRA2_LD_LIBRARY_PATH" "$SHELL_PROFILE" 2>/dev/null; then
-    echo "" >> "$SHELL_PROFILE"
-    echo "# Lyra 2.0 LD_LIBRARY_PATH" >> "$SHELL_PROFILE"
-    echo "export LYRA2_LD_LIBRARY_PATH=true" >> "$SHELL_PROFILE"
-    echo "export CUDA_HOME=/usr/local/cuda" >> "$SHELL_PROFILE"
-    echo "export LD_LIBRARY_PATH=\"\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH\"" >> "$SHELL_PROFILE"
-    echo "Added LD_LIBRARY_PATH to $SHELL_PROFILE"
+if [ "$IS_COLAB" = true ]; then
+    echo "In Google Colab, setting environment variables for current session..."
+    echo "export CUDA_HOME=/usr/local/cuda" >> /content/.bashrc 2>/dev/null || true
+    echo "export LD_LIBRARY_PATH=\"\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH\"" >> /content/.bashrc 2>/dev/null || true
+    echo "Environment variables set for current Colab session"
 else
-    echo "LD_LIBRARY_PATH already configured in $SHELL_PROFILE"
+    SHELL_PROFILE="$HOME/.bashrc"
+    if [ -n "$ZSH_VERSION" ]; then
+        SHELL_PROFILE="$HOME/.zshrc"
+    fi
+
+    if ! grep -q "LYRA2_LD_LIBRARY_PATH" "$SHELL_PROFILE" 2>/dev/null; then
+        echo "" >> "$SHELL_PROFILE"
+        echo "# Lyra 2.0 LD_LIBRARY_PATH" >> "$SHELL_PROFILE"
+        echo "export LYRA2_LD_LIBRARY_PATH=true" >> "$SHELL_PROFILE"
+        echo "export CUDA_HOME=/usr/local/cuda" >> "$SHELL_PROFILE"
+        echo "export LD_LIBRARY_PATH=\"\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH\"" >> "$SHELL_PROFILE"
+        echo "Added LD_LIBRARY_PATH to $SHELL_PROFILE"
+    else
+        echo "LD_LIBRARY_PATH already configured in $SHELL_PROFILE"
+    fi
 fi
 
 # Step 10: Download checkpoints
@@ -130,13 +167,21 @@ echo "Step 10: Downloading checkpoints..."
 echo "Please ensure you have downloaded the checkpoints from HuggingFace:"
 echo "  huggingface-cli download nvidia/Lyra-2.0 --include \"checkpoints/*\" --local-dir ."
 echo ""
-read -p "Have you downloaded the checkpoints? (y/n) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Please download checkpoints manually from:"
-    echo "  https://huggingface.co/nvidia/Lyra-2.0"
+
+if [ "$IS_COLAB" = true ]; then
+    echo "In Google Colab, please run this command in a separate cell:"
+    echo "  !huggingface-cli download nvidia/Lyra-2.0 --include \"checkpoints/*\" --local-dir ."
     echo ""
-    echo "Run: huggingface-cli download nvidia/Lyra-2.0 --include \"checkpoints/*\" --local-dir ."
+    echo "Then re-run this script or continue with the verification step."
+else
+    read -p "Have you downloaded the checkpoints? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Please download checkpoints manually from:"
+        echo "  https://huggingface.co/nvidia/Lyra-2.0"
+        echo ""
+        echo "Run: huggingface-cli download nvidia/Lyra-2.0 --include \"checkpoints/*\" --local-dir ."
+    fi
 fi
 
 # Step 11: Verify installation
@@ -167,12 +212,30 @@ echo "=========================================="
 echo "Installation Complete!"
 echo "=========================================="
 echo ""
-echo "To use Lyra 2.0 GUI:"
-echo "  1. Set environment variables:"
-echo "     export CUDA_HOME=/usr/local/cuda"
-echo "     export LD_LIBRARY_PATH=\"\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH\""
-echo "  2. Run the GUI:"
-echo "     PYTHONPATH=. python3 -m lyra_2._src.gui.lyra_gui"
-echo ""
-echo "The GUI will be available at http://localhost:7860"
+
+if [ "$IS_COLAB" = true ]; then
+    echo "To use Lyra 2.0 GUI in Google Colab:"
+    echo "  1. Set environment variables (run in a cell):"
+    echo "     %env CUDA_HOME=/usr/local/cuda"
+    echo "     %env LD_LIBRARY_PATH=/usr/local/cuda/lib64"
+    echo "  2. Run the GUI with public URL:"
+    echo "     PYTHONPATH=. python3 -m lyra_2._src.gui.lyra_gui --share"
+    echo ""
+    echo "For Street View GUI:"
+    echo "     PYTHONPATH=. python3 -m lyra_2._src.gui.streetview_gui --share"
+    echo ""
+    echo "The --share flag will create a public URL accessible from your browser."
+else
+    echo "To use Lyra 2.0 GUI:"
+    echo "  1. Set environment variables:"
+    echo "     export CUDA_HOME=/usr/local/cuda"
+    echo "     export LD_LIBRARY_PATH=\"\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH\""
+    echo "  2. Run the GUI:"
+    echo "     PYTHONPATH=. python3 -m lyra_2._src.gui.lyra_gui"
+    echo ""
+    echo "The GUI will be available at http://localhost:7860"
+    echo ""
+    echo "For Street View GUI (port 7861):"
+    echo "     PYTHONPATH=. python3 -m lyra_2._src.gui.streetview_gui"
+fi
 echo ""
