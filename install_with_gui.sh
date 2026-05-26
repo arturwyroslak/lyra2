@@ -35,11 +35,23 @@ if [ "$PYTHON_MAJOR" -ne 3 ] || [ "$PYTHON_MINOR" -ne 10 ]; then
     if [ "$IS_COLAB" = true ]; then
         echo "Installing Python 3.10 in Google Colab..."
         
-        # In Colab, use conda to install Python 3.10
-        conda install -n base python=3.10 -y -c conda-forge
+        # In Colab, install Python 3.10 from deadsnakes PPA
+        apt-get update
+        apt-get install -y software-properties-common
+        add-apt-repository ppa:deadsnakes/ppa -y
+        apt-get update
+        apt-get install -y python3.10 python3.10-dev python3.10-distutils
         
-        # Update python3 to point to conda environment
-        export PATH="$CONDA_PREFIX/bin:$PATH"
+        # Install pip for Python 3.10
+        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+        python3.10 get-pip.py
+        rm get-pip.py
+        
+        # Update python3 to point to python3.10
+        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+        
+        # Update PATH to use python3.10
+        export PATH="/usr/bin:$PATH"
         
         PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
         echo "Python version after installation: $PYTHON_VERSION"
