@@ -83,23 +83,18 @@ pip install requests>=2.31.0
 
 ### Starting the Street View GUI
 
-1. Activate the conda environment:
+1. Set environment variables:
 ```bash
-conda activate lyra2
+export CUDA_HOME=/usr/local/cuda
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
 ```
 
-2. Set environment variables:
+2. Launch the Street View GUI:
 ```bash
-SITE=$CONDA_PREFIX/lib/python3.10/site-packages
-export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$SITE/torch/lib:$SITE/nvidia/cuda_runtime/lib:$SITE/nvidia/cudnn/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+PYTHONPATH=. python3 -m lyra_2._src.gui.streetview_gui
 ```
 
-3. Launch the Street View GUI:
-```bash
-PYTHONPATH=. python -m lyra_2._src.gui.streetview_gui
-```
-
-4. Open your browser to: `http://localhost:7861`
+3. Open your browser to: `http://localhost:7861`
 
 **Note:** The Street View GUI runs on port 7861 to avoid conflicts with the main GUI (port 7860).
 
@@ -341,7 +336,7 @@ The Street View GUI uses the same Lyra 2.0 backend as the main GUI. You can:
 - CUDA 12.4+ (tested with CUDA 12.8)
 - NVIDIA GPU with sufficient VRAM (H100 80GB recommended)
 - Python 3.10
-- Conda environment
+- pip package manager
 - Google Street View API key (optional for demo mode)
 - Internet connection for Street View downloads
 

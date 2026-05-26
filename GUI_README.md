@@ -138,7 +138,7 @@ Enable "Use DMD Fast Inference" to:
 - CUDA 12.4+ (tested with CUDA 12.8)
 - NVIDIA GPU with sufficient VRAM (H100 80GB recommended)
 - Python 3.10
-- Conda environment
+- pip package manager
 
 ## Troubleshooting
 

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Installation script for Lyra 2.0 with GUI support
+# Installation script for Lyra 2.0 with GUI support (No Conda)
 # Based on INSTALL.md with additional GUI dependencies
 
 set -e  # Exit on error
@@ -12,34 +12,56 @@ echo "Lyra 2.0 Installation with GUI Support"
 echo "=========================================="
 echo ""
 
-# Check if conda is available
-if ! command -v conda &> /dev/null; then
-    echo "Error: conda is not installed or not in PATH"
-    echo "Please install Anaconda or Miniconda first"
-    exit 1
+# Check Python version
+echo "Checking Python version..."
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+
+if [ "$PYTHON_MAJOR" -ne 3 ] || [ "$PYTHON_MINOR" -ne 10 ]; then
+    echo "Warning: Python 3.10 is recommended. Current version: $PYTHON_VERSION"
+    echo "Installation may fail with other Python versions."
+    read -p "Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
 fi
 
-# Step 0: Clone repository if not already in it
-if [ ! -f "INSTALL.md" ]; then
-    echo "Step 0: Cloning repository..."
-    git clone --recursive git@github.com:nv-tlabs/lyra.git Lyra-2
-    cd Lyra-2
+# Check CUDA
+echo ""
+echo "Checking CUDA installation..."
+if [ -z "$CUDA_HOME" ]; then
+    if [ -d "/usr/local/cuda" ]; then
+        export CUDA_HOME=/usr/local/cuda
+        echo "Found CUDA at $CUDA_HOME"
+    else
+        echo "Error: CUDA_HOME not set and /usr/local/cuda not found"
+        echo "Please install CUDA 12.4+ and set CUDA_HOME"
+        exit 1
+    fi
+fi
+
+CUDA_VERSION=$($CUDA_HOME/bin/nvcc --version | grep "release" | awk '{print $5}' | sed 's/,//')
+echo "CUDA version: $CUDA_VERSION"
+
+
+# Step 1: Install system dependencies
+echo ""
+echo "Step 1: Installing system dependencies..."
+if command -v apt-get &> /dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y python3-pip python3-venv cmake ninja-build libgl1-mesa-glx ffmpeg pkg-config libeigen3-dev zlib1g-dev
+elif command -v yum &> /dev/null; then
+    sudo yum install -y python3-pip cmake ninja-build mesa-libGL ffmpeg pkgconfig eigen3-devel zlib-devel
 else
-    echo "Step 0: Already in repository directory"
+    echo "Warning: Could not detect package manager. Please install: cmake, ninja-build, libgl, ffmpeg, pkg-config, eigen3, zlib"
 fi
 
-# Step 1: Create conda environment
+# Step 2: Upgrade pip and install build tools
 echo ""
-echo "Step 1: Creating conda environment..."
-conda create -n lyra2 python=3.10 pip cmake ninja libgl ffmpeg packaging -c conda-forge -y
-conda activate lyra2
-CONDA_BACKUP_CXX="" conda install gcc=13.3.0 gxx=13.3.0 eigen zlib -c conda-forge -y
-
-# Step 2: Install CUDA toolkit inside the conda environment
-echo ""
-echo "Step 2: Installing CUDA toolkit..."
-conda install cuda -c nvidia/label/cuda-12.8.0 -y
-export CUDA_HOME=$CONDA_PREFIX
+echo "Step 2: Upgrading pip and installing build tools..."
+python3 -m pip install --upgrade pip setuptools wheel
 
 # Step 3: Install PyTorch
 echo ""
@@ -49,11 +71,10 @@ pip install torch==2.7.1 torchvision==0.22.1 --extra-index-url https://download.
 # Step 4: Set build environment variables
 echo ""
 echo "Step 4: Setting build environment variables..."
-SITE=$CONDA_PREFIX/lib/python3.10/site-packages
-export CPATH="$CUDA_HOME/include:$SITE/nvidia/cudnn/include:$SITE/nvidia/nccl/include:$CPATH"
-export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$SITE/torch/lib:$SITE/nvidia/cuda_runtime/lib:$SITE/nvidia/cudnn/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
-export CC="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc"
-export CXX="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++"
+SITE=$(python3 -c "import site; print(site.getsitepackages()[0])")
+export CPATH="$CUDA_HOME/include:$CPATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+export CUDA_HOME=$CUDA_HOME
 
 # Step 5: Install Python dependencies
 echo ""
@@ -63,8 +84,7 @@ pip install "git+https://github.com/microsoft/MoGe.git"
 pip install --no-build-isolation "transformer_engine[pytorch]"
 
 # Symlink cuda_runtime as cudart for transformer_engine compatibility
-SITE=$CONDA_PREFIX/lib/python3.10/site-packages
-ln -sf "$SITE/nvidia/cuda_runtime" "$SITE/nvidia/cudart"
+ln -sf "$SITE/nvidia/cuda_runtime" "$SITE/nvidia/cudart" 2>/dev/null || true
 
 # Step 6: Install Flash Attention
 echo ""
@@ -97,8 +117,8 @@ if ! grep -q "LYRA2_LD_LIBRARY_PATH" "$SHELL_PROFILE" 2>/dev/null; then
     echo "" >> "$SHELL_PROFILE"
     echo "# Lyra 2.0 LD_LIBRARY_PATH" >> "$SHELL_PROFILE"
     echo "export LYRA2_LD_LIBRARY_PATH=true" >> "$SHELL_PROFILE"
-    echo "SITE=\$CONDA_PREFIX/lib/python3.10/site-packages" >> "$SHELL_PROFILE"
-    echo "export LD_LIBRARY_PATH=\"\$CONDA_PREFIX/lib:\$SITE/torch/lib:\$SITE/nvidia/cuda_runtime/lib:\$SITE/nvidia/cudnn/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"" >> "$SHELL_PROFILE"
+    echo "export CUDA_HOME=/usr/local/cuda" >> "$SHELL_PROFILE"
+    echo "export LD_LIBRARY_PATH=\"\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH\"" >> "$SHELL_PROFILE"
     echo "Added LD_LIBRARY_PATH to $SHELL_PROFILE"
 else
     echo "LD_LIBRARY_PATH already configured in $SHELL_PROFILE"
@@ -122,22 +142,21 @@ fi
 # Step 11: Verify installation
 echo ""
 echo "Step 11: Verifying installation..."
-SITE=$CONDA_PREFIX/lib/python3.10/site-packages
-export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$SITE/torch/lib:$SITE/nvidia/cuda_runtime/lib:$SITE/nvidia/cudnn/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
 
-PYTHONPATH=. python -c "
+PYTHONPATH=. python3 -c "
 import torch, flash_attn, transformer_engine.pytorch, vipe_ext, depth_anything_3.api, moge.model.v1
 print('torch:', torch.__version__, '| cuda:', torch.cuda.is_available())
 print('all imports OK')
 "
 
-PYTHONPATH=. python -m lyra_2._src.inference.lyra2_zoomgs_inference --help
-PYTHONPATH=. python -m lyra_2._src.inference.vipe_da3_gs_recon --help
+PYTHONPATH=. python3 -m lyra_2._src.inference.lyra2_zoomgs_inference --help
+PYTHONPATH=. python3 -m lyra_2._src.inference.vipe_da3_gs_recon --help
 
 # Verify GUI dependencies
 echo ""
 echo "Verifying GUI dependencies..."
-python -c "
+python3 -c "
 import gradio
 print('gradio:', gradio.__version__)
 print('GUI dependencies OK')
@@ -149,12 +168,11 @@ echo "Installation Complete!"
 echo "=========================================="
 echo ""
 echo "To use Lyra 2.0 GUI:"
-echo "  1. Activate the conda environment: conda activate lyra2"
-echo "  2. Set environment variables:"
-echo "     SITE=\$CONDA_PREFIX/lib/python3.10/site-packages"
-echo "     export LD_LIBRARY_PATH=\"\$CONDA_PREFIX/lib:\$SITE/torch/lib:\$SITE/nvidia/cuda_runtime/lib:\$SITE/nvidia/cudnn/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\""
-echo "  3. Run the GUI:"
-echo "     PYTHONPATH=. python -m lyra_2._src.gui.lyra_gui"
+echo "  1. Set environment variables:"
+echo "     export CUDA_HOME=/usr/local/cuda"
+echo "     export LD_LIBRARY_PATH=\"\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH\""
+echo "  2. Run the GUI:"
+echo "     PYTHONPATH=. python3 -m lyra_2._src.gui.lyra_gui"
 echo ""
 echo "The GUI will be available at http://localhost:7860"
 echo ""

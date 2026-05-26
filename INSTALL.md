@@ -2,6 +2,8 @@
 
 Tested on Ubuntu 22.04 with CUDA 12.8 and NVIDIA H100 GPUs. Other Linux distributions and CUDA 12.4+ should also work but are not officially verified. Due to the complexity of the dependency stack, version conflicts may arise on different system configurations — if so, please open an issue.
 
+## Option 1: Installation with Conda (Recommended)
+
 ```bash
 # 0. Clone repository
 git clone --recursive git@github.com:nv-tlabs/lyra.git
@@ -62,3 +64,80 @@ print('all imports OK')
 PYTHONPATH=. python -m lyra_2._src.inference.lyra2_zoomgs_inference --help
 PYTHONPATH=. python -m lyra_2._src.inference.vipe_da3_gs_recon --help
 ```
+
+## Option 2: Installation without Conda
+
+```bash
+# 0. Clone repository
+git clone --recursive git@github.com:nv-tlabs/lyra.git
+cd Lyra-2
+
+# 1. Install system dependencies
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-venv cmake ninja-build libgl1-mesa-glx ffmpeg pkg-config libeigen3-dev zlib1g-dev
+
+# 2. Upgrade pip
+python3 -m pip install --upgrade pip setuptools wheel
+
+# 3. Install PyTorch
+pip install torch==2.7.1 torchvision==0.22.1 --extra-index-url https://download.pytorch.org/whl/cu128
+
+# 4. Set build environment variables
+export CUDA_HOME=/usr/local/cuda
+export CPATH="$CUDA_HOME/include:$CPATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# 5. Install Python dependencies
+pip install --no-deps -r requirements.txt
+pip install "git+https://github.com/microsoft/MoGe.git"
+pip install --no-build-isolation "transformer_engine[pytorch]"
+
+# Symlink cuda_runtime as cudart for transformer_engine compatibility
+SITE=$(python3 -c "import site; print(site.getsitepackages()[0])")
+ln -sf "$SITE/nvidia/cuda_runtime" "$SITE/nvidia/cudart" 2>/dev/null || true
+
+# 6. Install Flash Attention
+MAX_JOBS=16 pip install --no-build-isolation --no-binary :all: flash-attn==2.6.3
+
+# 7. Build vendored CUDA extensions
+USE_SYSTEM_EIGEN=1 pip install --no-build-isolation -e 'lyra_2/_src/inference/vipe'
+pip install --no-build-isolation -e 'lyra_2/_src/inference/depth_anything_3[gs]'
+```
+
+Add the following to your shell profile (e.g. `~/.bashrc`) to persist `LD_LIBRARY_PATH` across sessions:
+
+```bash
+export CUDA_HOME=/usr/local/cuda
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+```
+
+```bash
+# 8. Verify installation
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+PYTHONPATH=. python3 -c "
+import torch, flash_attn, transformer_engine.pytorch, vipe_ext, depth_anything_3.api, moge.model.v1
+print('torch:', torch.__version__, '| cuda:', torch.cuda.is_available())
+print('all imports OK')
+"
+PYTHONPATH=. python3 -m lyra_2._src.inference.lyra2_zoomgs_inference --help
+PYTHONPATH=. python3 -m lyra_2._src.inference.vipe_da3_gs_recon --help
+```
+
+## GUI Installation
+
+For GUI support (Gradio-based interface), run the installation script:
+
+```bash
+bash install_with_gui.sh
+```
+
+Or manually install GUI dependencies:
+
+```bash
+pip install gradio>=4.0.0
+pip install moviepy>=1.0.0
+pip install requests>=2.31.0
+```
+
+See [GUI_README.md](GUI_README.md) for main GUI and [STREETVIEW_README.md](STREETVIEW_README.md) for Street View GUI.
